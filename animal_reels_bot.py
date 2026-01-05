@@ -21,6 +21,21 @@ HASHTAGS = [
     "#animalworld", "#earthlife", "#reels"
 ]
 
+DEFAULT_TITLES = [
+    "Nature at its best 🐾",
+    "Wildlife moments you’ll love 🦁",
+    "Animals living their best life 🐶",
+    "Pure nature vibes 🌿",
+    "Life in the wild 🦊"
+]
+
+DEFAULT_CAPTIONS = [
+    "Nature never fails to amaze us 💚",
+    "Wildlife is pure magic ✨",
+    "Peaceful moments from nature 🍃",
+    "Animals remind us how beautiful life is 🐾"
+]
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 USED_FILE = os.path.join(BASE_DIR, "used_videos.json")
 
@@ -28,16 +43,14 @@ USED_FILE = os.path.join(BASE_DIR, "used_videos.json")
 def load_used():
     if not os.path.exists(USED_FILE):
         return []
-    with open(USED_FILE, "r") as f:
-        return json.load(f)
+    return json.load(open(USED_FILE))
 
 def save_used(video_id):
     used = load_used()
     used.append(video_id)
-    with open(USED_FILE, "w") as f:
-        json.dump(list(set(used)), f)
+    json.dump(list(set(used)), open(USED_FILE, "w"))
 
-# ================= 1. FETCH UNIQUE PIXABAY VIDEO =================
+# ================= PIXABAY UNIQUE VIDEO =================
 def fetch_video():
     used_ids = load_used()
     random.shuffle(ANIMALS)
@@ -59,7 +72,7 @@ def fetch_video():
 
     raise Exception("❌ No new Pixabay videos found")
 
-# ================= 2. FETCH FREESOUND MUSIC =================
+# ================= FREESOUND MUSIC =================
 def fetch_music():
     url = "https://freesound.org/apiv2/search/text/"
     params = {
@@ -81,7 +94,7 @@ def fetch_music():
     with open("music.mp3", "wb") as f:
         f.write(requests.get(audio_url).content)
 
-# ================= 3. MAKE REEL / SHORT =================
+# ================= MAKE REEL =================
 def make_reel():
     subprocess.run([
         "ffmpeg",
@@ -94,30 +107,32 @@ def make_reel():
         "-map", "1:a:0",
         "-shortest",
         "-c:v", "libx264",
-        "-preset", "fast",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "final_reel.mp4"
     ], check=True)
 
-# ================= 4. RANDOM CAPTION =================
+# ================= SAFE CAPTION BUILDER =================
 def build_caption():
-    with open(os.path.join(BASE_DIR, "titles.json")) as f:
-        titles = json.load(f)
-    with open(os.path.join(BASE_DIR, "captions.json")) as f:
-        captions = json.load(f)
+    titles = DEFAULT_TITLES
+    captions = DEFAULT_CAPTIONS
 
-    title = random.choice(titles)
-    caption = random.choice(captions)
+    titles_path = os.path.join(BASE_DIR, "titles.json")
+    captions_path = os.path.join(BASE_DIR, "captions.json")
 
-    return f"""{title}
+    if os.path.exists(titles_path):
+        titles = json.load(open(titles_path))
+    if os.path.exists(captions_path):
+        captions = json.load(open(captions_path))
 
-{caption}
+    return f"""{random.choice(titles)}
+
+{random.choice(captions)}
 
 {' '.join(HASHTAGS)}
 """
 
-# ================= 5. UPLOAD CATBOX =================
+# ================= CATBOX =================
 def upload_catbox():
     res = requests.post(
         "https://catbox.moe/user/api.php",
@@ -126,21 +141,15 @@ def upload_catbox():
     )
     return res.text.strip()
 
-# ================= 6. SEND TELEGRAM =================
+# ================= SEND =================
 def send_telegram(video_url, text):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
-    requests.post(url, data={
-        "chat_id": TELEGRAM_CHAT,
-        "video": video_url,
-        "caption": text
-    })
+    requests.post(
+        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo",
+        data={"chat_id": TELEGRAM_CHAT, "video": video_url, "caption": text}
+    )
 
-# ================= 7. SEND WEBHOOK =================
 def send_webhook(video_url, text):
-    requests.post(WEBHOOK_URL, json={
-        "video_url": video_url,
-        "caption": text
-    })
+    requests.post(WEBHOOK_URL, json={"video_url": video_url, "caption": text})
 
 # ================= MAIN =================
 def main():
