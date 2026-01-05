@@ -5,14 +5,14 @@ import os
 import subprocess
 from threading import Thread
 
-# =============== ENV =================
+# ================= ENV =================
 PIXABAY_KEY = os.getenv("PIXABAY_API_KEY")
 FREESOUND_KEY = os.getenv("FREESOUND_API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT = os.getenv("TELEGRAM_CHAT_ID")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# =============== CONSTANTS =================
+# ================= CONSTANTS =================
 ANIMALS = ["dog", "cat", "lion", "bird", "horse", "elephant"]
 
 HASHTAGS = [
@@ -21,20 +21,23 @@ HASHTAGS = [
     "#animalworld", "#earthlife", "#reels"
 ]
 
-USED_FILE = "used_videos.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+USED_FILE = os.path.join(BASE_DIR, "used_videos.json")
 
-# =============== HELPERS =================
+# ================= HELPERS =================
 def load_used():
     if not os.path.exists(USED_FILE):
         return []
-    return json.load(open(USED_FILE))
+    with open(USED_FILE, "r") as f:
+        return json.load(f)
 
 def save_used(video_id):
     used = load_used()
     used.append(video_id)
-    json.dump(list(set(used)), open(USED_FILE, "w"))
+    with open(USED_FILE, "w") as f:
+        json.dump(list(set(used)), f)
 
-# =============== 1. FETCH UNIQUE PIXABAY VIDEO =================
+# ================= 1. FETCH UNIQUE PIXABAY VIDEO =================
 def fetch_video():
     used_ids = load_used()
     random.shuffle(ANIMALS)
@@ -56,28 +59,29 @@ def fetch_video():
 
     raise Exception("❌ No new Pixabay videos found")
 
-# =============== 2. FETCH FREESOUND MUSIC =================
+# ================= 2. FETCH FREESOUND MUSIC =================
 def fetch_music():
-    search_url = "https://freesound.org/apiv2/search/text/"
+    url = "https://freesound.org/apiv2/search/text/"
     params = {
         "query": "nature",
         "filter": "license:\"Creative Commons 0\"",
         "token": FREESOUND_KEY
     }
-    sounds = requests.get(search_url, params=params).json()["results"]
+
+    sounds = requests.get(url, params=params).json()["results"]
     sound = random.choice(sounds)
 
-    sound_data = requests.get(
+    info = requests.get(
         f"https://freesound.org/apiv2/sounds/{sound['id']}/",
         params={"token": FREESOUND_KEY}
     ).json()
 
-    audio_url = sound_data["previews"]["preview-hq-mp3"]
+    audio_url = info["previews"]["preview-hq-mp3"]
 
     with open("music.mp3", "wb") as f:
         f.write(requests.get(audio_url).content)
 
-# =============== 3. MAKE REEL / SHORT =================
+# ================= 3. MAKE REEL / SHORT =================
 def make_reel():
     subprocess.run([
         "ffmpeg",
@@ -95,11 +99,17 @@ def make_reel():
         "-c:a", "aac",
         "final_reel.mp4"
     ], check=True)
-    
-# =============== 4. RANDOM CAPTION =================
+
+# ================= 4. RANDOM CAPTION =================
 def build_caption():
-    title = random.choice(json.load(open("titles.json")))
-    caption = random.choice(json.load(open("captions.json")))
+    with open(os.path.join(BASE_DIR, "titles.json")) as f:
+        titles = json.load(f)
+    with open(os.path.join(BASE_DIR, "captions.json")) as f:
+        captions = json.load(f)
+
+    title = random.choice(titles)
+    caption = random.choice(captions)
+
     return f"""{title}
 
 {caption}
@@ -107,7 +117,7 @@ def build_caption():
 {' '.join(HASHTAGS)}
 """
 
-# =============== 5. UPLOAD CATBOX =================
+# ================= 5. UPLOAD CATBOX =================
 def upload_catbox():
     res = requests.post(
         "https://catbox.moe/user/api.php",
@@ -116,7 +126,7 @@ def upload_catbox():
     )
     return res.text.strip()
 
-# =============== 6. SEND TELEGRAM =================
+# ================= 6. SEND TELEGRAM =================
 def send_telegram(video_url, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
     requests.post(url, data={
@@ -125,14 +135,14 @@ def send_telegram(video_url, text):
         "caption": text
     })
 
-# =============== 7. SEND WEBHOOK =================
+# ================= 7. SEND WEBHOOK =================
 def send_webhook(video_url, text):
     requests.post(WEBHOOK_URL, json={
         "video_url": video_url,
         "caption": text
     })
 
-# =============== MAIN =================
+# ================= MAIN =================
 def main():
     fetch_video()
     fetch_music()
@@ -146,4 +156,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-          
+
