@@ -13,7 +13,7 @@ TELEGRAM_CHAT = os.getenv("TELEGRAM_CHAT_ID")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 # ================= CONSTANTS =================
-ANIMALS = ["dog", "cat", "lion", "bird", "horse", "elephant"]
+ANIMALS = ["dog", "cat", "lion", "horse", "elephant", "tiger", "cow", "goat"]
 
 HASHTAGS = [
     "#animals", "#wildlife", "#nature",
@@ -50,27 +50,43 @@ def save_used(video_id):
     used.append(video_id)
     json.dump(list(set(used)), open(USED_FILE, "w"))
 
+def video_hash(url):
+    return str(abs(hash(url)))
+
 # ================= PIXABAY UNIQUE VIDEO =================
 def fetch_video():
     used_ids = load_used()
     random.shuffle(ANIMALS)
 
     for animal in ANIMALS:
-        url = f"https://pixabay.com/api/videos/?key={PIXABAY_KEY}&q={animal}&per_page=20"
+        url = f"https://pixabay.com/api/videos/?key={PIXABAY_KEY}&q={animal}&per_page=50&safesearch=true"
         data = requests.get(url).json()
 
         for hit in data.get("hits", []):
-            if hit["id"] not in used_ids:
-                video_url = hit["videos"]["large"]["url"]
+            video_url = hit["videos"]["large"]["url"]
+            vid_hash = video_hash(video_url)
 
-                with open("video.mp4", "wb") as f:
-                    f.write(requests.get(video_url).content)
+            # ❌ repeat stop
+            if vid_hash in used_ids:
+                continue
 
-                save_used(hit["id"])
-                print(f"✅ New video used: {hit['id']}")
-                return
+            # ❌ bird safety
+            if "bird" in hit.get("tags", "").lower():
+                continue
 
-    raise Exception("❌ No new Pixabay videos found")
+            # ⏱ duration 8–10 sec only
+            duration = hit.get("duration", 0)
+            if duration < 8 or duration > 10:
+                continue
+
+            with open("video.mp4", "wb") as f:
+                f.write(requests.get(video_url).content)
+
+            save_used(vid_hash)
+            print(f"✅ Unique animal video used: {vid_hash}")
+            return
+
+    raise Exception("❌ No unique animal video found")
 
 # ================= FREESOUND MUSIC =================
 def fetch_music():
@@ -94,11 +110,16 @@ def fetch_music():
     with open("music.mp3", "wb") as f:
         f.write(requests.get(audio_url).content)
 
-# ================= MAKE REEL =================
+# ================= MAKE REEL (8–10 SEC) =================
 def make_reel():
+    start = random.randint(0, 2)
+    duration = random.randint(8, 10)
+
     subprocess.run([
         "ffmpeg",
         "-y",
+        "-ss", str(start),
+        "-t", str(duration),
         "-i", "video.mp4",
         "-i", "music.mp3",
         "-vf",
