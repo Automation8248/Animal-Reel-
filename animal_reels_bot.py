@@ -3,7 +3,17 @@ import random
 import json
 import os
 import subprocess
+import time
 from threading import Thread
+
+# ================= TIME LIMIT =================
+START_TIME = time.time()
+MAX_RUNTIME = 30  # seconds
+
+def check_timeout():
+    if time.time() - START_TIME > MAX_RUNTIME:
+        print("⏰ 30 second limit reached. Exiting safely.")
+        exit(0)
 
 # ================= ENV =================
 PIXABAY_KEY = os.getenv("PIXABAY_API_KEY")
@@ -55,41 +65,43 @@ def video_hash(url):
 
 # ================= PIXABAY UNIQUE VIDEO =================
 def fetch_video():
+    check_timeout()
     used_ids = load_used()
     random.shuffle(ANIMALS)
 
     for animal in ANIMALS:
-        url = f"https://pixabay.com/api/videos/?key={PIXABAY_KEY}&q={animal}&per_page=50&safesearch=true"
-        data = requests.get(url).json()
+        check_timeout()
+        url = f"https://pixabay.com/api/videos/?key={PIXABAY_KEY}&q={animal}&per_page=10&safesearch=true"
+        data = requests.get(url, timeout=5).json()
 
         for hit in data.get("hits", []):
+            check_timeout()
+
             video_url = hit["videos"]["large"]["url"]
             vid_hash = video_hash(video_url)
 
-            # ❌ repeat stop
             if vid_hash in used_ids:
                 continue
 
-            # ❌ bird safety
             if "bird" in hit.get("tags", "").lower():
                 continue
 
-            # ⏱ duration 8–10 sec only
             duration = hit.get("duration", 0)
             if duration < 8 or duration > 10:
                 continue
 
             with open("video.mp4", "wb") as f:
-                f.write(requests.get(video_url).content)
+                f.write(requests.get(video_url, timeout=5).content)
 
             save_used(vid_hash)
             print(f"✅ Unique animal video used: {vid_hash}")
             return
 
-    raise Exception("❌ No unique animal video found")
+    raise Exception("❌ No valid animal video found")
 
 # ================= FREESOUND MUSIC =================
 def fetch_music():
+    check_timeout()
     url = "https://freesound.org/apiv2/search/text/"
     params = {
         "query": "nature",
@@ -97,21 +109,23 @@ def fetch_music():
         "token": FREESOUND_KEY
     }
 
-    sounds = requests.get(url, params=params).json()["results"]
+    sounds = requests.get(url, params=params, timeout=5).json()["results"]
     sound = random.choice(sounds)
 
     info = requests.get(
         f"https://freesound.org/apiv2/sounds/{sound['id']}/",
-        params={"token": FREESOUND_KEY}
+        params={"token": FREESOUND_KEY},
+        timeout=5
     ).json()
 
     audio_url = info["previews"]["preview-hq-mp3"]
 
     with open("music.mp3", "wb") as f:
-        f.write(requests.get(audio_url).content)
+        f.write(requests.get(audio_url, timeout=5).content)
 
-# ================= MAKE REEL (8–10 SEC) =================
+# ================= MAKE REEL (FAST) =================
 def make_reel():
+    check_timeout()
     start = random.randint(0, 2)
     duration = random.randint(8, 10)
 
@@ -128,12 +142,14 @@ def make_reel():
         "-map", "1:a:0",
         "-shortest",
         "-c:v", "libx264",
+        "-preset", "ultrafast",
         "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
         "-c:a", "aac",
         "final_reel.mp4"
     ], check=True)
 
-# ================= SAFE CAPTION BUILDER =================
+# ================= CAPTION =================
 def build_caption():
     titles = DEFAULT_TITLES
     captions = DEFAULT_CAPTIONS
@@ -155,10 +171,12 @@ def build_caption():
 
 # ================= CATBOX =================
 def upload_catbox():
+    check_timeout()
     res = requests.post(
         "https://catbox.moe/user/api.php",
         data={"reqtype": "fileupload"},
-        files={"fileToUpload": open("final_reel.mp4", "rb")}
+        files={"fileToUpload": open("final_reel.mp4", "rb")},
+        timeout=5
     )
     return res.text.strip()
 
@@ -166,16 +184,26 @@ def upload_catbox():
 def send_telegram(video_url, text):
     requests.post(
         f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo",
-        data={"chat_id": TELEGRAM_CHAT, "video": video_url, "caption": text}
+        data={"chat_id": TELEGRAM_CHAT, "video": video_url, "caption": text},
+        timeout=5
     )
 
 def send_webhook(video_url, text):
-    requests.post(WEBHOOK_URL, json={"video_url": video_url, "caption": text})
+    requests.post(
+        WEBHOOK_URL,
+        json={"video_url": video_url, "caption": text},
+        timeout=5
+    )
 
 # ================= MAIN =================
 def main():
+    check_timeout()
     fetch_video()
+
+    check_timeout()
     fetch_music()
+
+    check_timeout()
     make_reel()
 
     caption = build_caption()
