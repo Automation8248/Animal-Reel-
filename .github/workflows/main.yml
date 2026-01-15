@@ -2,7 +2,7 @@ name: Dynamic Animal Shorts
 
 on:
   schedule:
-    - cron: '0 1,13 * * *' # USA Morning & Evening
+    - cron: '0 13 * * *'  # Yeh sirf ek baar chalega (USA Morning / 6:30 PM IST)
   workflow_dispatch:
 
 jobs:
